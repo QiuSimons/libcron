@@ -24,10 +24,7 @@ include_directories(
 
 add_executable(
         ${PROJECT_NAME}
-        CronDataTest.cpp
-        CronRandomizationTest.cpp
-	CronScheduleTest.cpp
-	CronTest.cpp)
+)
 
 if(NOT MSVC)
 	target_link_libraries(${PROJECT_NAME} libcron pthread)
