@@ -1,240 +1,180 @@
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
-
 #include <catch.hpp>
-#include <date/date.h>
-#include <libcron/include/libcron/Cron.h>
-#include <libcron/include/libcron/CronData.h>
+#include <string>
+#include <unordered_map>
+#include <algorithm>
+#include <libcron/CronRandomization.h>
+#include <libcron/Cron.h>
+#include <iostream>
 
 using namespace libcron;
-using namespace date;
-using namespace std::chrono;
+const auto EXPECT_FAILURE = true;
 
-template<typename T>
-bool has_value_range(const std::set<T>& set, uint8_t low, uint8_t high)
+void test(const char* const random_schedule, bool expect_failure = false)
 {
-    bool found = true;
-    for (auto i = low; found && i <= high; ++i)
-    {
-        found &= set.find(static_cast<T>(i)) != set.end();
-    }
+    libcron::CronRandomization cr;
 
-    return found;
-}
+    for (int i = 0; i < 5000; ++i)
+    {
+        auto res = cr.parse(random_schedule);
+        auto schedule = std::get<1>(res);
 
-SCENARIO("Numerical inputs")
-{
-    GIVEN("Valid numerical inputs")
-    {
-        WHEN("Creating with all stars")
-        {
-            THEN("All parts are filled")
-            {
-                auto c = CronData::create("* * * * * ?");
-                REQUIRE(c.is_valid());
-                REQUIRE(c.get_seconds().size() == 60);
-                REQUIRE(has_value_range(c.get_seconds(), 0, 59));
-                REQUIRE(c.get_minutes().size() == 60);
-                REQUIRE(has_value_range(c.get_minutes(), 0, 59));
-                REQUIRE(c.get_hours().size() == 24);
-                REQUIRE(has_value_range(c.get_hours(), 0, 23));
-                REQUIRE(c.get_day_of_month().size() == 31);
-                REQUIRE(has_value_range(c.get_day_of_month(), 1, 31));
-                REQUIRE(c.get_day_of_week().size() == 7);
-                REQUIRE(has_value_range(c.get_day_of_week(), 0, 6));
-            }
-        }
-        AND_WHEN("Using full forward range")
-        {
-            THEN("Ranges are correct")
-            {
-                auto c = CronData::create("* 0-59 * * * ?");
-                REQUIRE(c.is_valid());
-                REQUIRE(c.get_seconds().size() == 60);
-                REQUIRE(c.get_minutes().size() == 60);
-                REQUIRE(c.get_hours().size() == 24);
-                REQUIRE(c.get_day_of_month().size() == 31);
-                REQUIRE(c.get_day_of_week().size() == 7);
-                REQUIRE(has_value_range(c.get_seconds(), 0, 59));
-            }
-        }
-        AND_WHEN("Using partial range")
-        {
-            THEN("Ranges are correct")
-            {
-                auto c = CronData::create("* * * 20-30 * ?");
-                REQUIRE(c.is_valid());
-                REQUIRE(c.get_seconds().size() == 60);
-                REQUIRE(c.get_minutes().size() == 60);
-                REQUIRE(c.get_hours().size() == 24);
-                REQUIRE(c.get_day_of_month().size() == 11);
-                REQUIRE(c.get_day_of_week().size() == 7);
-                REQUIRE(has_value_range(c.get_day_of_month(), 20, 30));
-            }
-        }
-        AND_WHEN("Using backward range")
-        {
-            THEN("Number of hours are correct")
-            {
-                auto c = CronData::create("* * 20-5 * * ?");
-                REQUIRE(c.is_valid());
-                REQUIRE(c.get_hours().size() == 10);
-                REQUIRE(c.get_hours().find(Hours::First) != c.get_hours().end());
-            }
-        }
-        AND_WHEN("Using various ranges")
-        {
-            THEN("Validation succeeds")
-            {
-                REQUIRE(CronData::create("0-59 * * * * ?").is_valid());
-                REQUIRE(CronData::create("* 0-59 * * * ?").is_valid());
-                REQUIRE(CronData::create("* * 0-23 * * ?").is_valid());
-                REQUIRE(CronData::create("* * * 1-31 * ?").is_valid());
-                REQUIRE(CronData::create("* * * * 1-12 ?").is_valid());
-                REQUIRE(CronData::create("* * * ? * 0-6").is_valid());
-            }
-        }
-    }
-    GIVEN("Invalid inputs")
-    {
-        WHEN("Creating items")
-        {
-            THEN("Validation fails")
-            {
-                REQUIRE_FALSE(CronData::create("").is_valid());
-                REQUIRE_FALSE(CronData::create("-").is_valid());
-                REQUIRE_FALSE(CronData::create("* ").is_valid());
-                REQUIRE_FALSE(CronData::create("* 0-60 * * * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * 0-25 * * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * 1-32 * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * * 1-13 ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * * * 0-7").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * 0-31 * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * * 0-12 ?").is_valid());
-                REQUIRE_FALSE(CronData::create("60 * * * * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* 60 * * * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * 25 * * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * 32 * ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * * 13 ?").is_valid());
-                REQUIRE_FALSE(CronData::create("* * * ? * 7").is_valid());
-            }
-        }
-    }
-}
+        Cron<> cron;
 
-SCENARIO("Literal input")
-{
-    GIVEN("Literal inputs")
-    {
-        WHEN("Using literal ranges")
+        if(expect_failure)
         {
-            THEN("Range is valid")
-            {
-                auto c = CronData::create("* * * * JAN-MAR ?");
-                REQUIRE(c.is_valid());
-                REQUIRE(has_value_range(c.get_months(), 1, 3));
-            }
-            AND_THEN("Range is valid")
-            {
-                auto c = CronData::create("* * * ? * SUN-FRI");
-                REQUIRE(c.is_valid());
-                REQUIRE(has_value_range(c.get_day_of_week(), 0, 5));
-            }
+            // Parsing of random might succeed, but it yields an invalid schedule.
+            auto r = std::get<0>(res) && cron.add_schedule("validate schedule", schedule, [](auto&) {});
+            REQUIRE_FALSE(r);
         }
-        AND_WHEN("Using both range and specific month")
+        else
         {
-            THEN("Range is valid")
-            {
-                auto c = CronData::create("* * * * JAN-MAR,DEC ?");
-                REQUIRE(c.is_valid());
-                REQUIRE(has_value_range(c.get_months(), 1, 3));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 4, 11));
-                REQUIRE(has_value_range(c.get_months(), 12, 12));
-            }
-            AND_THEN("Range is valid")
-            {
-                auto c = CronData::create("* * * ? JAN-MAR,DEC FRI,MON,THU");
-                REQUIRE(c.is_valid());
-                REQUIRE(has_value_range(c.get_months(), 1, 3));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 4, 11));
-                REQUIRE(has_value_range(c.get_months(), 12, 12));
-                REQUIRE(has_value_range(c.get_day_of_week(), 5, 5));
-                REQUIRE(has_value_range(c.get_day_of_week(), 1, 1));
-                REQUIRE(has_value_range(c.get_day_of_week(), 4, 4));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_day_of_week(), 0, 0));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_day_of_week(), 2, 3));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_day_of_week(), 6, 6));
-            }
-        }
-        AND_WHEN("Using backward range")
-        {
-            THEN("Range is valid")
-            {
-                auto c = CronData::create("* * * ? APR-JAN *");
-                REQUIRE(c.is_valid());
-                REQUIRE(has_value_range(c.get_months(), 4, 12));
-                REQUIRE(has_value_range(c.get_months(), 1, 1));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 2, 3));
-            }
-            AND_THEN("Range is valid")
-            {
-                auto c = CronData::create("* * * ? * sat-tue,wed");
-                REQUIRE(c.is_valid());
-                REQUIRE(has_value_range(c.get_day_of_week(), 6, 6)); // Has saturday
-                REQUIRE(has_value_range(c.get_day_of_week(), 0, 3)); // Has sun, mon, tue, wed
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_day_of_week(), 4, 5)); // Does not have thu or fri.
-            }
-        }
-    }
-}
-
-SCENARIO("Using step syntax")
-{
-    GIVEN("Step inputs")
-    {
-        WHEN("Using literal ranges")
-        {
-            THEN("Range is valid")
-            {
-                auto c = CronData::create("* * * * JAN/2 ?");
-                REQUIRE(c.is_valid());
-                REQUIRE(has_value_range(c.get_months(), 1, 1));
-                REQUIRE(has_value_range(c.get_months(), 3, 3));
-                REQUIRE(has_value_range(c.get_months(), 5, 5));
-                REQUIRE(has_value_range(c.get_months(), 7, 7));
-                REQUIRE(has_value_range(c.get_months(), 9, 9));
-                REQUIRE(has_value_range(c.get_months(), 11, 11));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 2, 2));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 4, 4));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 6, 6));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 8, 8));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 10, 10));
-                REQUIRE_FALSE(CronData::has_any_in_range(c.get_months(), 12, 12));
-            }
+            REQUIRE(std::get<0>(res));
+            REQUIRE(cron.add_schedule("validate schedule", schedule, [](auto&) {}));
 
         }
     }
 }
 
-SCENARIO("Dates that does not exist")
+SCENARIO("Randomize all the things")
 {
-    REQUIRE_FALSE(CronData::create("0 0 * 30 FEB *").is_valid());
-    REQUIRE_FALSE(CronData::create("0 0 * 31 APR *").is_valid());
-}
+    const char* random_schedule = "R(0-59) R(0-59) R(0-23) R(1-31) R(1-12) ?";
 
-SCENARIO("Date that exist in one of the months")
-{
-    REQUIRE(CronData::create("0 0 * 31 APR,MAY ?").is_valid());
-}
-
-SCENARIO("Replacing text with numbers")
-{
+    GIVEN(random_schedule)
     {
-        std::string s = "SUN-TUE";
-        REQUIRE(CronData::replace_string_name_with_numeric<libcron::DayOfWeek>(s) == "0-2");
+        THEN("Only valid schedules generated")
+        {
+            test(random_schedule);
+        }
+    }
+}
+
+SCENARIO("Randomize all the things with reverse ranges")
+{
+    const char* random_schedule = "R(45-15) R(30-0) R(18-2) R(28-15) R(8-3) ?";
+
+    GIVEN(random_schedule)
+    {
+        THEN("Only valid schedules generated")
+        {
+            test(random_schedule);
+        }
+    }
+}
+
+SCENARIO("Randomize all the things - day of week")
+{
+    const char* random_schedule = "R(0-59) R(0-59) R(0-23) ? R(1-12) R(0-6)";
+
+    GIVEN(random_schedule)
+    {
+        THEN("Only valid schedules generated")
+        {
+            test(random_schedule);
+        }
+    }
+}
+
+SCENARIO("Randomize all the things with reverse ranges - day of week")
+{
+    const char* random_schedule = "R(45-15) R(30-0) R(18-2) ? R(8-3) R(4-1)";
+
+    GIVEN(random_schedule)
+    {
+        THEN("Only valid schedules generated")
+        {
+            test(random_schedule);
+        }
+    }
+}
+
+SCENARIO("Test readme examples")
+{
+    GIVEN("0 0 R(13-20) * * ?")
+    {
+        THEN("Valid schedule generated")
+        {
+            test("0 0 R(13-20) * * ?");
+        }
     }
 
+    GIVEN("0 0 0 ? * R(0-6)")
     {
-        std::string s = "JAN-DEC";
-        REQUIRE(CronData::replace_string_name_with_numeric<libcron::Months>(s) == "1-12");
+        THEN("Valid schedule generated")
+        {
+            test("0 0 0 ? * R(0-6)");
+        }
+    }
+
+    GIVEN("0 R(45-15) */12 ? * *")
+    {
+        THEN("Valid schedule generated")
+        {
+            test("0 R(45-15) */12 ? * *");
+        }
+    }
+}
+
+SCENARIO("Randomization using text versions of days and months")
+{
+    GIVEN("0 0 0 ? * R(TUE-FRI)")
+    {
+        THEN("Valid schedule generated")
+        {
+           test("0 0 0 ? * R(TUE-FRI)");
+        }
+    }
+
+    GIVEN("Valid schedule")
+    {
+        THEN("Valid schedule generated")
+        {
+            test("0 0 0 ? R(JAN-DEC) R(MON-FRI)");
+        }
+        AND_WHEN("Given 0 0 0 ? R(DEC-MAR) R(SAT-SUN)")
+        {
+            THEN("Valid schedule generated")
+            {
+                test("0 0 0 ? R(DEC-MAR) R(SAT-SUN)");
+            }
+        }
+        AND_THEN("Given 0 0 0 ? R(JAN-FEB) *")
+        {
+            THEN("Valid schedule generated")
+            {
+                test("0 0 0 ? R(JAN-FEB) *");
+            }
+        }
+        AND_THEN("Given 0 0 0 ? R(OCT-OCT) *")
+        {
+            THEN("Valid schedule generated")
+            {
+                test("0 0 0 ? R(OCT-OCT) *");
+            }
+        }
+    }
+
+    GIVEN("Invalid schedule")
+    {
+        THEN("No schedule generated")
+        {
+            // Day of month specified - not allowed with day of week
+            test("0 0 0 1 R(JAN-DEC) R(MON-SUN)", EXPECT_FAILURE);
+        }
+        AND_THEN("No schedule generated")
+        {
+            // Invalid range
+            test("0 0 0 ? R(JAN) *", EXPECT_FAILURE);
+        }
+        AND_THEN("No schedule generated")
+        {
+            // Days in month field
+            test("0 0 0 ? R(MON-TUE) *", EXPECT_FAILURE);
+        }
+        AND_THEN("No schedule generated")
+        {
+            // Month in day field
+            test("0 0 0 ? * R(JAN-JUN)", EXPECT_FAILURE);
+        }
+
     }
 }
